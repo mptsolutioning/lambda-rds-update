@@ -207,12 +207,29 @@ resource "aws_lambda_function" "rds_manager" {
   )
 }
 
-resource "aws_lambda_permission" "allow_cloudwatch_to_call_lambda" {
-  statement_id  = "AllowExecutionFromCloudWatch"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.rds_manager.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.every_six_hours.arn
+resource "aws_iam_role_policy" "lambda_cloudwatch_policy" {
+  name = "LambdaCloudWatchPolicy"
+  role = aws_iam_role.lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "events:PutEvents",
+          "events:PutRule",
+          "events:PutTargets",
+          "events:DeleteRule",
+          "events:RemoveTargets",
+          "events:DescribeRule",
+          "events:ListRules",
+          "events:ListTargetsByRule",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 data "archive_file" "lambda_zip" {
