@@ -17,6 +17,7 @@ resource "aws_dynamodb_table" "lambda_rds_state" {
   name         = "LambdaRDSState"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "StateKey"
+  range_key    = "Timestamp"
 
   attribute {
     name = "StateKey"
