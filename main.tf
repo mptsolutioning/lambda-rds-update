@@ -61,7 +61,7 @@ resource "aws_sns_topic_subscription" "email_subscription" {
 
 
 resource "aws_s3_bucket" "lambda_code_bucket" {
-  bucket = "harmonate-lambda-functions-${random_pet.unique_name.id}"
+  bucket        = "harmonate-lambda-functions-${random_pet.unique_name.id}"
   force_destroy = true
 
   tags = merge(
@@ -173,6 +173,11 @@ resource "aws_iam_role_policy" "lambda_dynamodb_access" {
       },
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_cloudwatch_policy" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_lambda_function" "rds_manager" {
