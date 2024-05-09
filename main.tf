@@ -13,6 +13,10 @@ provider "aws" {
   profile = var.profile
 }
 
+resource "random_pet" "unique_name" {
+  length = 2
+}
+
 resource "aws_dynamodb_table" "lambda_rds_state" {
   name         = "LambdaRDSState"
   billing_mode = "PAY_PER_REQUEST"
@@ -57,7 +61,8 @@ resource "aws_sns_topic_subscription" "email_subscription" {
 
 
 resource "aws_s3_bucket" "lambda_code_bucket" {
-  bucket = "harmonate-lambda-infra-functions"
+  bucket = "harmonate-lambda-functions-${random_pet.unique_name.id}"
+  force_destroy = true
 
   tags = merge(
     local.common_tags,
@@ -69,6 +74,7 @@ resource "aws_s3_bucket" "lambda_code_bucket" {
 
 resource "aws_s3_bucket_policy" "lambda_bucket_policy" {
   bucket = aws_s3_bucket.lambda_code_bucket.id
+
 
   policy = jsonencode({
     Version = "2012-10-17"

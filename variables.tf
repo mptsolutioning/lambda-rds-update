@@ -8,7 +8,7 @@ variable "rds_instance_id" {
 variable "region" {
   type        = string
   description = "The AWS region to deploy the resources."
-  default     = "us-west-2"
+  default     = "us-east-2"
 }
 
 variable "profile" {
