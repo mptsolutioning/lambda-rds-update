@@ -191,11 +191,11 @@ resource "aws_lambda_function" "rds_manager" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE      = aws_dynamodb_table.lambda_rds_state.name
-      SNS_TOPIC_ARN       = aws_sns_topic.lambda_notifications.arn
-      RDS_INSTANCE_ID     = var.rds_instance_id
-      STOP_AFTER_MINUTES  = "30"
-      START_AFTER_DAYS    = "6"
+      DYNAMODB_TABLE     = aws_dynamodb_table.lambda_rds_state.name
+      SNS_TOPIC_ARN      = aws_sns_topic.lambda_notifications.arn
+      RDS_INSTANCE_ID    = var.rds_instance_id
+      STOP_AFTER_MINUTES = "30"
+      START_AFTER_DAYS   = "6"
     }
   }
 
@@ -244,12 +244,4 @@ resource "aws_s3_object" "lambda_zip" {
   source = data.archive_file.lambda_zip.output_path
 
   etag = filemd5(data.archive_file.lambda_zip.output_path)
-}
-
-resource "null_resource" "invoke_lambda_after_creation" {
-  depends_on = [aws_lambda_function.rds_manager]
-
-  provisioner "local-exec" {
-    command = "aws lambda invoke --function-name ${aws_lambda_function.rds_manager.function_name} response.json"
-  }
 }
