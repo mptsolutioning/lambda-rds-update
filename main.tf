@@ -193,7 +193,6 @@ resource "aws_lambda_function" "rds_manager" {
     variables = {
       DYNAMODB_TABLE      = aws_dynamodb_table.lambda_rds_state.name
       SNS_TOPIC_ARN       = aws_sns_topic.lambda_notifications.arn
-      LAMBDA_FUNCTION_ARN = aws_lambda_function.rds_manager.arn
       RDS_INSTANCE_ID     = var.rds_instance_id
       STOP_AFTER_MINUTES  = "30"
       START_AFTER_DAYS    = "6"
