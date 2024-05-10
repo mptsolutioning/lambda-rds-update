@@ -41,6 +41,26 @@ resource "aws_dynamodb_table" "lambda_rds_state" {
   )
 }
 
+resource "aws_dynamodb_table_item" "initial_state" {
+  table_name = aws_dynamodb_table.lambda_rds_state.name
+  hash_key   = "StateKey"
+  range_key  = "Timestamp"
+
+  item = jsonencode({
+    StateKey = {
+      S = "RDSControl"
+    },
+    Timestamp = {
+      S = timeadd(timestamp(), "-144h") # Subtract 144 hours (6 days)
+    },
+    State = {
+      S = "STOPPED"
+    }
+  })
+
+  depends_on = [aws_dynamodb_table.lambda_rds_state]
+}
+
 resource "aws_sns_topic" "lambda_notifications" {
   name = "lambda-notifications"
   tags = merge(
@@ -70,6 +90,13 @@ resource "aws_s3_bucket" "lambda_code_bucket" {
       Purpose = "Store Lambda Function Code"
     }
   )
+}
+
+resource "aws_s3_bucket_versioning" "lambda_code_bucket_versioning" {
+  bucket = aws_s3_bucket.lambda_code_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
 resource "aws_s3_bucket_policy" "lambda_bucket_policy" {
@@ -197,16 +224,17 @@ resource "aws_lambda_function" "rds_manager" {
   s3_bucket = aws_s3_bucket.lambda_code_bucket.id
   s3_key    = "rds-manager.zip"
 
-  role    = aws_iam_role.lambda_execution_role.arn
-  timeout = 30
+  role             = aws_iam_role.lambda_execution_role.arn
+  timeout          = 120
+  source_code_hash = filebase64sha256(data.archive_file.lambda_zip.output_path)
 
   environment {
     variables = {
       DYNAMODB_TABLE     = aws_dynamodb_table.lambda_rds_state.name
       SNS_TOPIC_ARN      = aws_sns_topic.lambda_notifications.arn
       RDS_INSTANCE_ID    = var.rds_instance_id
-      STOP_AFTER_MINUTES = "30"
-      START_AFTER_DAYS   = "6"
+      STOP_AFTER_MINUTES = var.stop_after_minutes
+      START_AFTER_DAYS   = var.start_after_days
     }
   }
 
@@ -256,3 +284,7 @@ resource "aws_s3_object" "lambda_zip" {
 
   etag = filemd5(data.archive_file.lambda_zip.output_path)
 }
+
+
+# TODO: remove any cloduwatch events that are created by the lambda
+# TODO: get actual state of RDS instance

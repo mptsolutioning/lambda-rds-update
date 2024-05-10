@@ -32,3 +32,15 @@ variable "project" {
   type        = string
   default     = "LambdaRDSState"
 }
+
+variable "stop_after_minutes" {
+  description = "The number of minutes to wait before stopping the RDS instance."
+  type        = number
+  default     = 30
+}
+
+variable "start_after_days" {
+  description = "The number of minutes to wait before starting the RDS instance."
+  type        = number
+  default     = 6
+}
