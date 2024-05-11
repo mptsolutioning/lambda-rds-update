@@ -1,6 +1,10 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+data "aws_ssm_parameter" "rds_instance_name" {
+  name = "/rds/instance/to_keep_turned_off"
+}
+
 locals {
   common_tags = {
     Name        = var.project
@@ -39,26 +43,6 @@ resource "aws_dynamodb_table" "lambda_rds_state" {
       Purpose = "Manage RDS Start/Stop State"
     }
   )
-}
-
-resource "aws_dynamodb_table_item" "initial_state" {
-  table_name = aws_dynamodb_table.lambda_rds_state.name
-  hash_key   = "StateKey"
-  range_key  = "Timestamp"
-
-  item = jsonencode({
-    StateKey = {
-      S = "RDSControl"
-    },
-    Timestamp = {
-      S = timeadd(timestamp(), "-144h") # Subtract 144 hours (6 days)
-    },
-    State = {
-      S = "STOPPED"
-    }
-  })
-
-  depends_on = [aws_dynamodb_table.lambda_rds_state]
 }
 
 resource "aws_sns_topic" "lambda_notifications" {
@@ -102,7 +86,6 @@ resource "aws_s3_bucket_versioning" "lambda_code_bucket_versioning" {
 resource "aws_s3_bucket_policy" "lambda_bucket_policy" {
   bucket = aws_s3_bucket.lambda_code_bucket.id
 
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -138,10 +121,11 @@ resource "aws_iam_role" "lambda_execution_role" {
         }
       },
     ]
+
   })
 }
 
-resource "aws_iam_role_policy" "lambda_policy" {
+resource "aws_iam_role_policy" "lambda_rds_policy" {
   name = "rds_management_lambda_policy"
   role = aws_iam_role.lambda_execution_role.id
 
@@ -152,15 +136,28 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Action = [
           "rds:StartDBInstance",
           "rds:StopDBInstance",
+          "rds:DescribeDBInstances",
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "logs:PutLogEvents",
+          "ssm:GetParameter"
         ],
-        Effect   = "Allow",
-        Resource = "arn:aws:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:db:${var.rds_instance_id}"
+        Effect = "Allow",
+        Resource = [
+          "arn:aws:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:db:${data.aws_ssm_parameter.rds_instance_name.value}",
+          "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${data.aws_ssm_parameter.rds_instance_name.name}"
+        ]
       },
     ]
   })
+}
+
+resource "aws_lambda_permission" "lambda_cloudwatch_policy" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.rds_manager.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:rule/*"
 }
 
 resource "aws_iam_role_policy" "lambda_sns_publish" {
@@ -211,7 +208,7 @@ resource "aws_lambda_function" "rds_manager" {
   depends_on = [
     aws_s3_bucket.lambda_code_bucket,
     aws_iam_role.lambda_execution_role,
-    aws_iam_role_policy.lambda_policy,
+    aws_iam_role_policy.lambda_rds_policy,
     aws_iam_role_policy.lambda_sns_publish,
     aws_iam_role_policy.lambda_dynamodb_access,
     aws_dynamodb_table.lambda_rds_state,
@@ -232,7 +229,7 @@ resource "aws_lambda_function" "rds_manager" {
     variables = {
       DYNAMODB_TABLE     = aws_dynamodb_table.lambda_rds_state.name
       SNS_TOPIC_ARN      = aws_sns_topic.lambda_notifications.arn
-      RDS_INSTANCE_ID    = var.rds_instance_id
+      RDS_INSTANCE_ID    = data.aws_ssm_parameter.rds_instance_name.value
       STOP_AFTER_MINUTES = var.stop_after_minutes
       START_AFTER_DAYS   = var.start_after_days
     }
@@ -285,6 +282,19 @@ resource "aws_s3_object" "lambda_zip" {
   etag = filemd5(data.archive_file.lambda_zip.output_path)
 }
 
+output "lambda_function_arn" {
+  description = "The ARN of the Lambda function"
+  value       = aws_lambda_function.rds_manager.arn
+}
 
-# TODO: remove any cloduwatch events that are created by the lambda
-# TODO: get actual state of RDS instance
+resource "aws_cloudwatch_log_group" "lambda_log_group" {
+  name              = "/aws/lambda/${aws_lambda_function.rds_manager.function_name}"
+  retention_in_days = 14
+
+  tags = merge(
+    local.common_tags,
+    {
+      Purpose = "Store Lambda Function Logs"
+    }
+  )
+}

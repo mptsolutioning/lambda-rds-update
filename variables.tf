@@ -1,10 +1,5 @@
 # variables.tf
 
-variable "rds_instance_id" {
-  type        = string
-  description = "The ID of the RDS instance to manage."
-}
-
 variable "region" {
   type        = string
   description = "The AWS region to deploy the resources."
